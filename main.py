@@ -121,7 +121,7 @@ def main():
     mastodon = get_mastodon()
     update_all(mastodon)
 
-    PORT = os.environ.get("PORT") or 9876
+    PORT = os.environ.get("PORT", 9876)
 
     # Start server only after retrieving all stats for the first time, to prevent set-to-zero contamination
     start_wsgi_server(PORT)
