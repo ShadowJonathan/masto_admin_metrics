@@ -153,10 +153,10 @@ MEASURES = {
 
 
 def update_all(mastodon: Mastodon):
-    update_counters(mastodon)
+        update_counters(mastodon)
 
-    for unique in MEASURES["unique"].values():
-        unique.update(mastodon)
+        for unique in MEASURES["unique"].values():
+            unique.update(mastodon)
 
 
 def update_counters(mastodon: Mastodon):
@@ -212,7 +212,11 @@ def main():
 
     while True:
         time.sleep(UPDATE_SECS)
-        update_all(mastodon)
+        from mastodon.errors import MastodonServerError
+        try:
+            update_all(mastodon)
+        except MastodonServerError as e:
+            print(f"Server error {e!r}, using cached results")
 
 
 if __name__ == "__main__":
