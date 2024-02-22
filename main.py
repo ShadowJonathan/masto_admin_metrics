@@ -10,14 +10,10 @@ SEVEN_DAYS = timedelta(days=7)
 THIRTY_DAYS = timedelta(days=30)
 
 
-class FakeCounter(Gauge):
-    _type = "counter"
-
-
 class CounterMeasure:
     def __init__(self, name):
         self.name = name
-        self.c = FakeCounter(f"mastodon_measure_{name}", f"Count of {name} from the last day")
+        self.c = Gauge(f"mastodon_measure_{name}_yesterday", f"Count of {name} from the last day")
 
     def update_with_measure(self, count: int):
         self.c.set(count)
@@ -26,14 +22,17 @@ class CounterMeasure:
 class UniqueMeasure:
     def __init__(self, name):
         self.name = name
-        self.g_1d = FakeCounter(
-            f"mastodon_measure_{name}_unique_1d", f"Unique instances of {name} from the last day"
+        self.g_1d = Gauge(
+            f"mastodon_measure_{name}_unique_yesterday",
+            f"Unique instances of {name} from the last day",
         )
         self.g_7d = Gauge(
-            f"mastodon_measure_{name}_unique_7d", f"Unique instances of {name} from the last 7 days"
+            f"mastodon_measure_{name}_unique_last_week",
+            f"Unique instances of {name} from the last 7 days",
         )
         self.g_30d = Gauge(
-            f"mastodon_measure_{name}_unique_30d", f"Unique instances of {name} from the last 30 days"
+            f"mastodon_measure_{name}_unique_last_30d",
+            f"Unique instances of {name} from the last 30 days",
         )
 
     def update(self, mastodon: Mastodon):
@@ -106,13 +105,15 @@ def get_mastodon() -> Mastodon:
         client_id=CLIENT_KEY,
         client_secret=CLIENT_SECRET,
         access_token=ACCESS_TOKEN,
-        api_base_url=BASE_URL
+        api_base_url=BASE_URL,
     )
 
     app_name = mastodon.app_verify_credentials().name
     version = mastodon.retrieve_mastodon_version()
 
-    print(f"Logged into mastodon version {version}, application {app_name}, base URL {mastodon.api_base_url}")
+    print(
+        f"Logged into mastodon version {version}, application {app_name}, base URL {mastodon.api_base_url}"
+    )
 
     return mastodon
 
@@ -129,7 +130,7 @@ def main():
     print(f"Started server on port {PORT}")
 
     while True:
-        time.sleep(60*15)
+        time.sleep(60 * 15)
         update_all(mastodon)
 
 
