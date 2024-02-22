@@ -129,7 +129,7 @@ def main():
     print(f"Started server on port {PORT}")
 
     while True:
-        time.sleep(30)
+        time.sleep(60*15)
         update_all(mastodon)
 
 
