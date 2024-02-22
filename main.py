@@ -203,6 +203,7 @@ def main():
     update_all(mastodon)
 
     PORT = os.environ.get("PORT", 9876)
+    UPDATE_SECS = float(os.environ.get("UPDATE_SECS", 30))
 
     # Start server only after retrieving all stats for the first time, to prevent set-to-zero contamination
     start_wsgi_server(PORT)
@@ -210,7 +211,7 @@ def main():
     print(f"Started server on port {PORT}")
 
     while True:
-        time.sleep(60 * 15)
+        time.sleep(UPDATE_SECS)
         update_all(mastodon)
 
 

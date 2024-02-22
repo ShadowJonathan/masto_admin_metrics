@@ -15,6 +15,7 @@ feel free to disable all other permissions (such as `write`).
 - `MASTODON_CLIENT_SECRET`: The application's Client Secret
 - `MASTODON_ACCESS_TOKEN`: The application's Access Token
 - `PORT`: The port that the metrics server will bind itself to, defaults to `9876`
+- `UPDATE_SECS`: The amount of seconds to wait between calling `/measures`, defaults to 30
 
 There's also a Dockerfile provided, so that you could add it to a `docker-compose.yml` file with the following snippet:
 ```yaml
