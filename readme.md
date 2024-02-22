@@ -1,10 +1,9 @@
 # Mastodon Admin Metrics
 
+> This is a bit WIP, I'm still figuring out the format of metrics and how to provide them consistently
+
 This is a very simple script that exports mastodon admin dashboard metrics ("measures") to prometheus format,
 to allow for easier manipulation and dashboard integration into grafana and the likes.
-
-All metrics given show data for the *previous day*, this is a bit odd since prometheus expects data to be given for the current time,
-but due to the way mastodon summarises metrics, this is how it's fetched.
 
 I've made a recommended grafana dashboard to go along with this data source: `WIP`
 
