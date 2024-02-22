@@ -1,60 +1,137 @@
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 from mastodon import Mastodon
-from prometheus_client import Gauge, start_wsgi_server
+from prometheus_client import Gauge, Counter, start_wsgi_server
 
 ONE_DAY = timedelta(days=1)
 SEVEN_DAYS = timedelta(days=7)
 THIRTY_DAYS = timedelta(days=30)
 
 
-class CounterMeasure:
-    def __init__(self, name):
-        self.name = name
-        self.c = Gauge(f"mastodon_measure_{name}_yesterday", f"Count of {name} from the last day")
+# some sanity functions
+def today() -> date:
+    return datetime.utcnow().date()
 
-    def update_with_measure(self, count: int):
-        self.c.set(count)
+
+def yesterday() -> date:
+    return today() - ONE_DAY
+
+
+def date_as_utc_datetime(d: date) -> datetime:
+    from datetime import timezone
+
+    return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+
+
+class CounterMeasure:
+    def __init__(self, name, today: bool = True):
+        self.name = name
+        base_name = f"mastodon_measure_{name}"
+        self.today = Gauge(
+            base_name,
+            f"Counter of {name} (so far) for today",
+        )
+        self.yesterday = Gauge(
+            f"{base_name}" + "_yesterday",
+            f"Counter of {name} from yesterday",
+        )
+
+    def update_with_data(self, data: list[dict]):
+        t = None
+        y = None
+
+        for day in data:
+            date = day["date"].date()
+            value = day["value"]
+
+            if date == today():
+                t = value
+            elif date == yesterday():
+                y = value
+
+        assert t is not None, "no data from today"
+        assert y is not None, "no data from yesterday"
+
+        self.today.set(t)
+        self.yesterday.set(y)
+
+
+def verify_range(data: list[dict], begin_date: date, end_date: date) -> bool:
+    earliest = min(item["date"].date() for item in data)
+    latest = max(item["date"].date() for item in data)
+
+    return earliest == begin_date and latest == end_date
 
 
 class UniqueMeasure:
     def __init__(self, name):
         self.name = name
-        self.g_1d = Gauge(
-            f"mastodon_measure_{name}_unique_yesterday",
-            f"Unique instances of {name} from the last day",
+        base_name = f"mastodon_measure_{name}_unique"
+        self.today = Gauge(base_name + "_today", f"Unique instances of {name} (so far) today")
+        self.yesterday = Gauge(
+            base_name + "_yesterday",
+            f"Unique instances of {name} yesterday",
         )
-        self.g_7d = Gauge(
-            f"mastodon_measure_{name}_unique_last_week",
-            f"Unique instances of {name} from the last 7 days",
+        self.last_7d = Gauge(
+            base_name + "_last_7d",
+            f"Unique instances of {name} the last 7 days (excluding today)",
         )
-        self.g_30d = Gauge(
-            f"mastodon_measure_{name}_unique_last_30d",
-            f"Unique instances of {name} from the last 30 days",
+        self.last_30d = Gauge(
+            base_name + "_last_30d",
+            f"Unique instances of {name} the last 30 days (excluding today)",
         )
 
     def update(self, mastodon: Mastodon):
-        kw = {self.name: True}
+        self.update_day(mastodon, today(), self.today)
+        self.update_day(mastodon, yesterday(), self.yesterday)
 
-        one_day = mastodon.admin_measures(
-            datetime.now() - ONE_DAY, datetime.now(), **kw
-        )[0]
-        seven_days = mastodon.admin_measures(
-            datetime.now() - SEVEN_DAYS, datetime.now(), **kw
-        )[0]
-        thirty_days = mastodon.admin_measures(
-            datetime.now() - THIRTY_DAYS, datetime.now(), **kw
-        )[0]
+        self.update_range(mastodon, yesterday() - SEVEN_DAYS, yesterday(), self.last_7d)
+        self.update_range(
+            mastodon, yesterday() - THIRTY_DAYS, yesterday(), self.last_30d
+        )
 
-        self.g_1d.set(one_day["total"])
-        self.g_7d.set(seven_days["total"])
-        self.g_30d.set(thirty_days["total"])
+    def update_day(self, mastodon: Mastodon, d: date, g: Gauge):
+        results = mastodon.admin_measures(
+            date_as_utc_datetime(d),
+            date_as_utc_datetime(d + ONE_DAY),
+            **{self.name: True},
+        )
+
+        result = results[0]
+
+        data = result["data"]
+
+        assert len(data) == 1, "measures returned data for more than 1 day"
+
+        item = data[0]
+
+        assert item["date"].date() == d
+
+        g.set(item["value"])
+
+    def update_range(
+        self, mastodon: Mastodon, start_date: date, end_date: date, g: Gauge
+    ):
+        results = mastodon.admin_measures(
+            date_as_utc_datetime(start_date),
+            date_as_utc_datetime(end_date + ONE_DAY),
+            **{self.name: True},
+        )
+
+        result = results[0]
+
+        data = result["data"]
+
+        assert verify_range(
+            data, start_date, end_date
+        ), f"range exceeded; wanted {[start_date, end_date]} {[data[0]['date'], data[-1]['date']]}"
+
+        g.set(result["total"])
 
 
 MEASURE_NAMES = {
-    # Just a counter, just fetch the last day
     "counter": [
         "interactions",
         "new_users",
@@ -85,14 +162,17 @@ def update_all(mastodon: Mastodon):
 def update_counters(mastodon: Mastodon):
     kw = {name: True for name in MEASURES["counter"].keys()}
     counts = {
-        data["key"]: data["total"]
+        data["key"]: data["data"]
         for data in mastodon.admin_measures(
-            datetime.now() - timedelta(hours=24), datetime.now(), **kw
+            # Get a wide range so today and yesterday is definitely included
+            date_as_utc_datetime(yesterday()),
+            date_as_utc_datetime(today() + ONE_DAY),
+            **kw,
         )
     }
 
-    for name, count in counts.items():
-        MEASURES["counter"][name].update_with_measure(count)
+    for name, data in counts.items():
+        MEASURES["counter"][name].update_with_data(data)
 
 
 def get_mastodon() -> Mastodon:
