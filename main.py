@@ -199,8 +199,8 @@ def get_mastodon() -> Mastodon:
 
 
 def main():
-    mastodon = get_mastodon()
-    update_all(mastodon)
+    m = get_mastodon()
+    update_all(m)
 
     PORT = os.environ.get("PORT", 9876)
     UPDATE_SECS = float(os.environ.get("UPDATE_SECS", 30))
@@ -210,16 +210,26 @@ def main():
 
     print(f"Started server on port {PORT}")
 
+    up = Gauge(
+        "masto_admin_metrics_up",
+        f"Whether the last fetch to the measure endpoint succeeded completely. If 0, is using cached results.",
+    )
+    up.set(1)
+
     from mastodon.errors import MastodonServerError, MastodonNetworkError
 
     while True:
         time.sleep(UPDATE_SECS)
         try:
-            update_all(mastodon)
+            update_all(m)
         except MastodonServerError as e:
             print(f"Server error {e!r}, using cached results")
+            up.set(0)
         except MastodonNetworkError as e:
             print(f"Network Error {e!r}, using cached results")
+            up.set(0)
+        else:
+            up.set(1)
 
 
 if __name__ == "__main__":
