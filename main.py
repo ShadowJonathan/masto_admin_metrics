@@ -186,6 +186,7 @@ def get_mastodon() -> Mastodon:
         client_secret=CLIENT_SECRET,
         access_token=ACCESS_TOKEN,
         api_base_url=BASE_URL,
+        user_agent="Mozilla/5.0 (compatible; masto_admin_metrics; mastodonpy)"
     )
 
     app_name = mastodon.app_verify_credentials().name
