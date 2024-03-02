@@ -210,13 +210,16 @@ def main():
 
     print(f"Started server on port {PORT}")
 
+    from mastodon.errors import MastodonServerError, MastodonNetworkError
+
     while True:
         time.sleep(UPDATE_SECS)
-        from mastodon.errors import MastodonServerError
         try:
             update_all(mastodon)
         except MastodonServerError as e:
             print(f"Server error {e!r}, using cached results")
+        except MastodonNetworkError as e:
+            print(f"Network Error {e!r}, using cached results")
 
 
 if __name__ == "__main__":
