@@ -103,11 +103,13 @@ class UniqueMeasure:
 
         data = result["data"]
 
-        assert len(data) == 1, "measures returned data for more than 1 day"
+        item = None
 
-        item = data[0]
+        for piece in data:
+            if piece["date"].date() == d:
+                item = piece
 
-        assert item["date"].date() == d
+        assert item is not None, "no data from date"
 
         g.set(item["value"])
 
@@ -116,7 +118,7 @@ class UniqueMeasure:
     ):
         results = mastodon.admin_measures(
             date_as_utc_datetime(start_date),
-            date_as_utc_datetime(end_date + ONE_DAY),
+            date_as_utc_datetime(end_date),
             **{self.name: True},
         )
 
@@ -126,7 +128,7 @@ class UniqueMeasure:
 
         assert verify_range(
             data, start_date, end_date
-        ), f"range exceeded; wanted {[start_date, end_date]} {[data[0]['date'], data[-1]['date']]}"
+        ), f"range exceeded; wanted {[start_date, end_date]}, got {[data[0]['date'], data[-1]['date']]}"
 
         g.set(result["total"])
 
@@ -151,12 +153,18 @@ MEASURES = {
     "unique": {name: UniqueMeasure(name) for name in MEASURE_NAMES["unique"]},
 }
 
+REPORTS_GAUGE = Gauge("mastodon_reports", "Current amount of unresolved reports")
+SIGNUPS_GAUGE = Gauge("mastodon_pending_accounts", "Current amount of pending accounts")
+
 
 def update_all(mastodon: Mastodon):
         update_counters(mastodon)
 
         for unique in MEASURES["unique"].values():
             unique.update(mastodon)
+
+        update_reports(mastodon)
+        update_signups(mastodon)
 
 
 def update_counters(mastodon: Mastodon):
@@ -173,6 +181,12 @@ def update_counters(mastodon: Mastodon):
 
     for name, data in counts.items():
         MEASURES["counter"][name].update_with_data(data)
+
+def update_reports(mastodon: Mastodon):
+    REPORTS_GAUGE.set(len(mastodon.admin_reports()))
+
+def update_signups(mastodon: Mastodon):
+    SIGNUPS_GAUGE.set(len(mastodon.admin_accounts_v2(status="pending")))
 
 
 def get_mastodon() -> Mastodon:
